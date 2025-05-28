@@ -6,9 +6,6 @@ import matplotlib.pyplot as plt # type: ignore
 import cv2 as cv # type: ignore
 from scipy.io import savemat # type: ignore
 
-""" Entrada: 'seg_sa_ED.nii.gz' e/ou 'seg_sa_ES.nii.gz'
-    Saída: Contornos de cada fatia em formato .TXT e .JPG """
-
 data_dir = os.getcwd()
 section = ['ED', 'ES']
 os.makedirs(os.path.join(f'{data_dir}/output', 'contours-txt'), exist_ok=True)
