@@ -1,8 +1,8 @@
-import os
-import numpy as np
+import os # type: ignore
+import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
-import scipy.io as sio # type: ignore
-from nibabel import load # type: ignore
+from scipy.io import loadmat, savemat # type: ignore
+from nibabel import load  # type: ignore
 from cv2 import dilate # type: ignore
 from skimage.measure import find_contours # type: ignore
 
@@ -14,11 +14,12 @@ for data in data_list:
     os.makedirs(os.path.join(f'{data_dir}/output/{data}', 'contours-txt'), exist_ok=True)
     os.makedirs(os.path.join(f'{data_dir}/output/{data}', 'contours-png'), exist_ok=True)
     try:
-        mat = sio.loadmat(f'{data_dir}/input/paciente_cine_2/Patient_2.mat')
-        print('  Arquivo .MAT encontrado.')
+        mat_dir = f'{data_dir}/input/{data}/{data}.mat'
+        mat = loadmat(mat_dir)
+        print(f'  Reading {mat_dir} ...')
     except FileNotFoundError:
         print('  Erro: Arquivo .MAT não encontrado.')
-
+        exit(1)
 
     for fr in section:
         # Lendo a imagem
@@ -33,15 +34,14 @@ for data in data_list:
         image = nim.get_fdata()
         X, Y, Z = image.shape
 
-        # Dicionário para armazenar os contornos
+        endox = np.full((80,1,Z), np.nan)
+        endoy = np.full((80,1,Z), np.nan)
+        rvendox = np.full((80,1,Z), np.nan)
+        rvendoy = np.full((80,1,Z), np.nan)
+        rvepix = np.full((80,1,Z), np.nan)
+        rvepiy = np.full((80,1,Z), np.nan)
+
         contours_dict = {}
-        #np.empty()
-        endox = np.zeros((80,1,Z))
-        endoy = np.zeros((80,1,Z))
-        rvendox = np.zeros((80,1,Z))
-        rvendoy = np.zeros((80,1,Z))
-        rvepix = np.zeros((80,1,Z))
-        rvepiy = np.zeros((80,1,Z))
         
         for frame in range(Z):
             # Convertendo a imagem para 2D
@@ -83,7 +83,6 @@ for data in data_list:
             for contour in contours:
                 ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red')
 
-            # Adicionando padding de 3mm
             # Obtendo o espaçamento dos pixels (x, y)
             pixel_spacing = nim.header['pixdim'][1:3]  
             # Convertendo 3mm para pixels
@@ -97,7 +96,7 @@ for data in data_list:
             # Adicionando padding na imagem original
             slice_2d += mask
 
-            # Extraindo contornos da segmentação completa com adição do padding
+            # Extraindo contornos da segmentação completa com adição do padding (RVEpi)
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos no dicionário
             contours_dict[f'{fr}_{frame}_EP'] = [contour.tolist() for contour in contours]
@@ -128,7 +127,7 @@ for data in data_list:
                         if i % 6 == 0:
                             txt_file.write(f'{point[0]:.6f} {point[1]:.6f} 0\n')
 
-        # Reescrevendo arquivo .MAT
+        # Reescrevendo arquivo .mat
         if 'setstruct' in mat: 
             mat['setstruct']['EndoX'][0][0] = endox
             mat['setstruct']['EndoY'][0][0] = endoy
@@ -136,9 +135,9 @@ for data in data_list:
             mat['setstruct']['RVEndoY'][0][0] = rvendoy
             mat['setstruct']['RVEpiX'][0][0] = rvepix
             mat['setstruct']['RVEpiY'][0][0] = rvepiy
-            sio.savemat(f'{data_dir}/output/paciente_cine_2/Patient_2_Editado.mat', mat)
+            savemat(f'{data_dir}/output/{data}/{data}_editado.mat', mat)
             print('  Arquivo .MAT reescrito.')
         else:
             print('  Erro: Variável "setstruct" não encontrada no arquivo .MAT.')
             
-print ('Done.')
+print ('  Find Contours done.')
