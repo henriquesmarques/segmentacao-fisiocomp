@@ -15,9 +15,9 @@ for data in data_list:
     os.makedirs(os.path.join(f'{data_dir}/output/{data}', 'contours-png'), exist_ok=True)
     try:
         mat = sio.loadmat(f'{data_dir}/input/paciente_cine_2/Patient_2.mat')
-        print('    Arquivo .MAT encontrado.')
+        print('  Arquivo .MAT encontrado.')
     except FileNotFoundError:
-        print('    Erro: Arquivo .MAT não encontrado.')
+        print('  Erro: Arquivo .MAT não encontrado.')
 
 
     for fr in section:
@@ -35,6 +35,13 @@ for data in data_list:
 
         # Dicionário para armazenar os contornos
         contours_dict = {}
+        #np.empty()
+        endox = np.zeros((80,1,Z))
+        endoy = np.zeros((80,1,Z))
+        rvendox = np.zeros((80,1,Z))
+        rvendoy = np.zeros((80,1,Z))
+        rvepix = np.zeros((80,1,Z))
+        rvepiy = np.zeros((80,1,Z))
         
         for frame in range(Z):
             # Convertendo a imagem para 2D
@@ -42,23 +49,36 @@ for data in data_list:
             # Definindo tamanho da plotagem
             fig, ax = plt.subplots(figsize=(Y / 25, X / 25))
 
-            # Ventrículo esquerdo (EndoX)
+            # Ventrículo esquerdo (Endo)
             mask = (slice_2d == 1)
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
-            # print(contours)
             # Salvando os contornos de cada máscara no dicionário
             contours_dict[f'{fr}_{frame}_VE'] = [contour.tolist() for contour in contours]
+            # Salvando os contornos em um array numpy
+            for contour in contours:
+                for i, point in enumerate(contour):
+                    if (i < 480) and (i % 6 == 0):
+                        ind = int(i / 6)
+                        endox[ind,0,frame] = point[1]
+                        endoy[ind,0,frame] = point[0]
             # Plotando os contornos
             for contour in contours:
                 ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red')
                 
-            # Ventrículo direito
+            # Ventrículo direito (RVEndo)
             mask = (slice_2d == 3)
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos de cada máscara no dicionário
             contours_dict[f'{fr}_{frame}_VD'] = [contour.tolist() for contour in contours]
+            # Salvando os contornos em um array numpy
+            for contour in contours:
+                for i, point in enumerate(contour):
+                    if (i < 480) and (i % 6 == 0):
+                        ind = int(i / 6)
+                        rvendox[ind,0,frame] = point[1]
+                        rvendoy[ind,0,frame] = point[0]
             # Plotando os contornos
             for contour in contours:
                 ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red')
@@ -81,6 +101,13 @@ for data in data_list:
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos no dicionário
             contours_dict[f'{fr}_{frame}_EP'] = [contour.tolist() for contour in contours]
+            # Salvando os contornos em um array numpy
+            for contour in contours:
+                for i, point in enumerate(contour):
+                    if (i < 480) and (i % 6 == 0):
+                        ind = int(i / 6)
+                        rvepix[ind,0,frame] = point[1]
+                        rvepiy[ind,0,frame] = point[0]
             # Plotando os contornos
             for contour in contours:
                 ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='blue')
@@ -101,77 +128,17 @@ for data in data_list:
                         if i % 6 == 0:
                             txt_file.write(f'{point[0]:.6f} {point[1]:.6f} 0\n')
 
-        # Salvando os contornos no arquivo .mat de entrada
-        endox = np.zeros(shape = (80,1,Z))
-        endoy = np.zeros(shape = (80,1,Z))
-        rvendox = np.zeros(shape = (80,1,Z))
-        rvendoy = np.zeros(shape = (80,1,Z))
-        rvepix = np.zeros(shape = (80,1,Z))
-        rvepiy = np.zeros(shape = (80,1,Z))
-    
-        for key, contours in contours_dict.items():
-            for contour in contours:
-                # print(f'        {key}')
-                if (f'{fr}_{frame}_VE' == key):
-                    for i, point in enumerate(contour):
-                        if i < 80:  # Limite de 80 pontos
-                            endoy[i, 0, frame] = point[0]
-                            endox[i, 0, frame] = point[1]
-                elif (f'{fr}_{frame}_VD' == key):
-                    for i, point in enumerate(contour):
-                        if i < 80:  # Limite de 80 pontos
-                            rvendoy[i, 0, frame] = point[0]
-                            rvendox[i, 0, frame] = point[1]
-                elif (f'{fr}_{frame}_EP' == key):
-                    for i, point in enumerate(contour):
-                        if i < 80:  # Limite de 80 pontos
-                            rvepiy[i, 0, frame] = point[0]
-                            rvepix[i, 0, frame] = point[1]
-            
-            
-        # print(contours_dict)
-        """ for key, contours in contours_dict.items():
-            for contour in contours:
-                # print(f'        {key}')
-                print(f'{fr}_{frame}_VE')
-                k = l = m = 0
-                for point in contour:
-                    if (f'{fr}_{frame}_VE' == key):
-                        # print(f'        {key}')
-                        endoy[k,0,frame] = point[0]
-                        endox[k,0,frame] = point[1]
-                        k = k + 1
-                    if (f'{fr}_{frame}_VD' == key):
-                        # print(f'        {key}')
-                        rvendoy[l,0,frame] = point[0]
-                        rvendox[l,0,frame] = point[1]
-                        l = l + 1
-                    if (f'{fr}_{frame}_EP' == key):
-                        # print(f'        {key}')
-                        rvepiy[m,0,frame] = point[0]
-                        rvepix[m,0,frame] = point[1]
-                        m = m + 1 """
-
         # Reescrevendo arquivo .MAT
         if 'setstruct' in mat: 
-            print('    Dimensions EndoX: ', mat['setstruct']['EndoX'][0][0].ndim)
-            print('    Shape EndoX: ', mat['setstruct']['EndoX'][0][0].shape)
-            print('    Size EndoX: ', mat['setstruct']['EndoX'][0][0].size)
-            
             mat['setstruct']['EndoX'][0][0] = endox
             mat['setstruct']['EndoY'][0][0] = endoy
             mat['setstruct']['RVEndoX'][0][0] = rvendox
             mat['setstruct']['RVEndoY'][0][0] = rvendoy
             mat['setstruct']['RVEpiX'][0][0] = rvepix
             mat['setstruct']['RVEpiY'][0][0] = rvepiy
-
-            # print('    Dimensions EndoX: ', mat['setstruct']['EndoX'][0][0].ndim)
-            # print('    Shape EndoX: ', mat['setstruct']['EndoX'][0][0].shape)
-            # print('    Size EndoX: ', mat['setstruct']['EndoX'][0][0].size)
-
             sio.savemat(f'{data_dir}/output/paciente_cine_2/Patient_2_Editado.mat', mat)
-            print('    Arquivo .MAT reescrito.')
+            print('  Arquivo .MAT reescrito.')
         else:
-            print('    Erro: Variável "setstruct" não encontrada no arquivo .MAT.')
+            print('  Erro: Variável "setstruct" não encontrada no arquivo .MAT.')
             
 print ('Done.')
