@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.io import loadmat, savemat
 from scipy.interpolate import interp1d
 from nibabel import load # type: ignore
-from cv2 import dilate # type: ignore
+from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
 
 def resample_closed_curve(points, num_points=80):
@@ -75,6 +75,10 @@ for data in data_list:
 
             # Endo
             mask = (slice_2d == 1)
+            # Aplicando técnica de dilatação e erosão
+            kernel = np.ones((3, 3))
+            mask = dilate(mask.astype(np.uint8), kernel, iterations=1)
+            mask = erode(mask.astype(np.uint8), kernel, iterations=1)
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
@@ -87,10 +91,14 @@ for data in data_list:
                             endoy[ind,0,frame] = point[0]
             # Plotando os contornos com os pontos originais
             for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red')
+                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='black')
                 
             # RVEndo
             mask = (slice_2d == 3)
+            # Aplicando técnica de dilatação e erosão
+            kernel = np.ones((3, 3))
+            mask = dilate(mask.astype(np.uint8), kernel, iterations=1)
+            mask = erode(mask.astype(np.uint8), kernel, iterations=1)
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
@@ -106,15 +114,18 @@ for data in data_list:
                 ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red')
 
             # RVEpi
-            kernel_size = 3
-            # Cria uma matriz quadrada de tamanho kernel_size x kernel_size
-            kernel = np.ones((kernel_size, kernel_size), np.uint8)
             # Técnica de dilatação
+            kernel_size = 3
+            kernel = np.ones((kernel_size, kernel_size), np.uint8)
             mask = dilate(mask.astype(np.uint8), kernel, iterations=1)
             # Subtraindo interseção entre a máscara 2
             mask = mask & ~(slice_2d == 2)
             # Adicionando padding na imagem original
             slice_2d += mask
+            # Aplicando técnica de dilatação e erosão
+            kernel = np.ones((3, 3))
+            slice_2d = dilate(slice_2d.astype(np.uint8), kernel, iterations=1)
+            slice_2d = erode(slice_2d.astype(np.uint8), kernel, iterations=1)
             # Extraindo contornos da segmentação completa com adição do padding
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos em um array numpy
