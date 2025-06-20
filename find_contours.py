@@ -7,7 +7,7 @@ from nibabel import load # type: ignore
 from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
 
-def resample_closed_curve(points, num_points=80):
+def resample_closed_curve(points, num_points):
     points = np.asarray(points)
     
     # Close the curve if needed
@@ -89,13 +89,16 @@ for data in data_list:
             if contours:
                 for contour in contours:
                     if len(contour) > 2:
-                        new_contours = resample_closed_curve(contour, 80)
+                        new_contours = resample_closed_curve(contour, 79)
                         for ind, point in enumerate(new_contours):
                             endox[ind,0,frame] = point[1]
                             endoy[ind,0,frame] = point[0]
+            endox[79,0,frame] = endox[0,0,frame]
+            endoy[79,0,frame] = endoy[0,0,frame]
             # Plotando os contornos com os pontos originais
-            for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='black')
+            """ for contour in contours:
+                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='black') """
+            ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
                 
             # RVEndo
             mask = (slice_2d == 3)
@@ -107,13 +110,16 @@ for data in data_list:
             if contours:
                 for contour in contours:
                     if len(contour) > 2:
-                        new_contours = resample_closed_curve(contour, 80)
+                        new_contours = resample_closed_curve(contour, 79)
                         for ind, point in enumerate(new_contours):
                             rvendox[ind,0,frame] = point[1]
                             rvendoy[ind,0,frame] = point[0]
+            rvendox[79,0,frame] = rvendox[0,0,frame]
+            rvendoy[79,0,frame] = rvendoy[0,0,frame]
             # Plotando os contornos com os pontos originais
-            for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red')
+            """ for contour in contours:
+                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red') """
+            ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
 
             # RVEpi
             # Técnica de dilatação
@@ -132,13 +138,17 @@ for data in data_list:
             if contours:
                 for contour in contours:
                     if len(contour) > 2:
-                        new_contours = resample_closed_curve(contour, 80)
+                        new_contours = resample_closed_curve(contour, 79)
                         for ind, point in enumerate(new_contours):
                             rvepix[ind,0,frame] = point[1]
                             rvepiy[ind,0,frame] = point[0]
+            # Fechando a curva
+            rvepiy[79,0,frame] = rvepiy[0,0,frame]
+            rvepix[79,0,frame] = rvepix[0,0,frame]
             # Plotando os contornos com os pontos originais
-            for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='blue')
+            """ for contour in contours:
+                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='blue') """
+            ax.plot(rvepiy[:,0,frame], rvepix[:,0,frame], linewidth=0.5, color='blue')
 
             # Salvando os contornos em imagens .jpg
             contour_image_path = os.path.join(f'{data_dir}/output/{data}/contours-png', f'{fr}_{frame}.png')
@@ -183,8 +193,5 @@ for data in data_list:
             print('  Salvando arquivo .MAT ...')
         else:
             print('  Erro: Variável "setstruct" não encontrada no arquivo .MAT')
-        
-        # Verificação da fatia inicial
-        
 
 print ('  Find Contours done.')
