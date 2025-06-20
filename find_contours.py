@@ -136,8 +136,8 @@ for data in data_list:
         for frame in range(Z):
             # Convertendo a imagem para 2D
             slice_2d = image[:, :, frame]
-            # Definindo tamanho da plotagem
-            fig, ax = plt.subplots(figsize=(Y / 25, X / 25))
+            """ # Definindo tamanho da plotagem
+            fig, ax = plt.subplots(figsize=(Y / 25, X / 25)) """
 
             # Endo
             mask = (slice_2d == 1)
@@ -148,9 +148,8 @@ for data in data_list:
             # Salvando os contornos em um array numpy
             generate_closed_curve(contours, endox, endoy, frame)
             # Plotando os contornos com os pontos originais
-            for contour in contours:
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray')
-            ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
+            """ for contour in contours:
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
                 
             # RVEndo
             mask = (slice_2d == 3)
@@ -161,9 +160,8 @@ for data in data_list:
             # Salvando os contornos em um array numpy
             generate_closed_curve(contours, rvendox, rvendoy, frame)
             # Plotando os contornos com os pontos originais
-            for contour in contours:
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray')
-            ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
+            """ for contour in contours:
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
 
             # RVEpi
             # Técnica de dilatação
@@ -181,39 +179,54 @@ for data in data_list:
             # Salvando os contornos em um array numpy
             generate_closed_curve(contours, rvepix, rvepiy, frame)
             # Plotando os contornos com os pontos originais
-            for contour in contours:
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray')
+            """ for contour in contours:
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
+
+            """ # Salvando os contornos em imagens .jpg
+            ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
+            ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
             ax.plot(rvepiy[:,0,frame], rvepix[:,0,frame], linewidth=0.5, color='blue')
+            contour_image_path = os.path.join(f'{data_dir}/output/{data}/contours-png', f'{fr}_{frame}.png')
+            plt.axis('off')
+            plt.savefig(contour_image_path, pad_inches=0)
+            plt.close(fig) """
+
+        # Removendo contorno do endocárdio das primeiras fatias
+        frame = 2
+        while (frame > 0):
+            if np.isnan(endox[0,0,frame]) or np.isnan(rvendox[0,0,frame]):
+                if not np.isnan(rvepix[0,0,frame]):
+                    for ind in range(80):
+                        endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = np.nan
+                    frame = frame - 1
+                    while (frame > 0):
+                        if not np.isnan(endox[0,0,frame]) or not np.isnan(rvendox[0,0,frame]) or not np.isnan(rvepix[0,0,frame]):
+                            for ind in range(80):
+                                endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
+                        frame = frame - 1
+            frame = frame - 1
+
+        for frame in range(Z):
+            # Salvando os contornos em arquivos .txt 
+            contour_data = [("Endo", endox, endoy),("RVEndo", rvendox, rvendoy), ("RVEpi", rvepix, rvepiy)]
+            for prefix, x_array, y_array in contour_data:
+                txt_path = os.path.join(f'{data_dir}/output/{data}/contours-txt', f'{fr}_{frame}_{prefix}.txt')
+                with open(txt_path, 'w') as txt_file:
+                    for ind in range(80):
+                        if np.isnan(x_array[ind, 0, frame]):
+                            txt_file.write('0 0 0\n')
+                        else:
+                            txt_file.write(f'{x_array[ind,0,frame]:.6f} {y_array[ind,0,frame]:.6f} 0\n')
 
             # Salvando os contornos em imagens .jpg
+            fig, ax = plt.subplots(figsize=(Y / 25, X / 25))
+            ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
+            ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
+            ax.plot(rvepiy[:,0,frame], rvepix[:,0,frame], linewidth=0.5, color='blue')
             contour_image_path = os.path.join(f'{data_dir}/output/{data}/contours-png', f'{fr}_{frame}.png')
             plt.axis('off')
             plt.savefig(contour_image_path, pad_inches=0)
             plt.close(fig)
-            # Salvando os contornos em arquivos .txt 
-            txt_path = os.path.join(f'{data_dir}/output/{data}/contours-txt', f'{fr}_{frame}_Endo.txt')
-            with open(txt_path, 'w') as txt_file:
-                for ind in range(80):
-                    if np.isnan(endox[ind,0,frame]):
-                        txt_file.write('0 0 0\n')
-                    else:
-                        txt_file.write(f'{endox[ind,0,frame]:.6f} {endoy[ind,0,frame]:.6f} 0\n')
-
-            txt_path = os.path.join(f'{data_dir}/output/{data}/contours-txt', f'{fr}_{frame}_RVEndo.txt')
-            with open(txt_path, 'w') as txt_file:
-                for ind in range(80):
-                    if np.isnan(rvendox[ind,0,frame]):
-                        txt_file.write('0 0 0\n')
-                    else:
-                        txt_file.write(f'{rvendox[ind,0,frame]:.6f} {rvendoy[ind,0,frame]:.6f} 0\n')
-
-            txt_path = os.path.join(f'{data_dir}/output/{data}/contours-txt', f'{fr}_{frame}_RVEpi.txt')
-            with open(txt_path, 'w') as txt_file:
-                for ind in range(80):
-                    if np.isnan(rvepix[ind,0,frame]):
-                        txt_file.write('0 0 0\n')
-                    else:
-                        txt_file.write(f'{rvepix[ind,0,frame]:.6f} {rvepiy[ind,0,frame]:.6f} 0\n')
 
         # Reescrevendo arquivo .MAT
         if 'setstruct' in mat: 
