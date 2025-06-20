@@ -7,13 +7,79 @@ from nibabel import load # type: ignore
 from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
 
+def smooth_image(image, size_kernel):
+    """ 
+    Aplicando técnica de dilatação para cobrir pequenas imperfeições e logo após a técnica 
+    de erosão para voltar ao tamanho original.
+    """
+    kernel = np.ones((size_kernel, size_kernel))
+    image = dilate(image.astype(np.uint8), kernel, iterations=1)
+    image = erode(image.astype(np.uint8), kernel, iterations=1)
+    return image
+
+def generate_closed_curve(contours, x, y, frame):
+    """
+    Atualiza os arrays x e y com exatamente 80 pontos da maior curva fechada informada.
+    """
+    if len(contours) == 1:
+        contour = contours[0]
+        if len(contour) > 2:
+            new_contours = resample_closed_curve(contour, 79)
+            for ind, point in enumerate(new_contours):
+                x[ind, 0, frame] = point[1]
+                y[ind, 0, frame] = point[0]
+            # Fechando a curva
+            x[79, 0, frame] = x[0, 0, frame]
+            y[79, 0, frame] = y[0, 0, frame]
+
+    elif len(contours) > 1:
+        maior_area = 0.0
+        id_maior = 0
+        for i, contour in enumerate(contours):
+            area = area_closed_curve(contour)
+            if area > maior_area:
+                maior_area = area
+                id_maior = i
+        generate_closed_curve([contours[id_maior]], x, y, frame)
+
+def area_closed_curve(pontos):
+    """
+    Calcula a área de uma curva fechada (polígono) usando a Fórmula de Shoelace.
+
+    Args:
+        pontos: Uma lista de tuplas, onde cada tupla (x, y) representa um ponto
+                no plano cartesiano que compõe a curva fechada.
+                Os pontos devem estar em ordem sequencial (horário ou anti-horário).
+
+    Returns:
+        A área da curva fechada (polígono) como um float.
+        Retorna 0.0 se a lista de pontos tiver menos de 3 pontos (não forma um polígono).
+    """
+    num_pontos = len(pontos)
+    if num_pontos < 3:
+        print("Para formar uma curva fechada (polígono), são necessários pelo menos 3 pontos.")
+        return 0.0
+
+    soma_primeiro_termo = 0
+    soma_segundo_termo = 0
+
+    for i in range(num_pontos):
+        x1, y1 = pontos[i]
+        x2, y2 = pontos[(i + 1) % num_pontos]  # O operador % garante que o último ponto se conecta ao primeiro
+
+        soma_primeiro_termo += x1 * y2
+        soma_segundo_termo += y1 * x2
+
+    area = 0.5 * abs(soma_primeiro_termo - soma_segundo_termo)
+    return area
+        
 def resample_closed_curve(points, num_points):
     points = np.asarray(points)
     
     # Close the curve if needed
     if not np.allclose(points[0], points[-1]):
         points = np.vstack([points, points[0]])
-    
+
     # Compute cumulative distances (arc lengths)
     deltas = np.diff(points, axis=0)
     segment_lengths = np.linalg.norm(deltas, axis=1)
@@ -33,12 +99,6 @@ def resample_closed_curve(points, num_points):
     resampled_y = interp_y(target_lengths)
     
     return np.stack([resampled_x, resampled_y], axis=1)
-
-def smooth_image(image, size_kernel):
-    kernel = np.ones((size_kernel, size_kernel))
-    image = dilate(image.astype(np.uint8), kernel, iterations=1)
-    image = erode(image.astype(np.uint8), kernel, iterations=1)
-    return image
 
 data_dir = os.getcwd()
 data_list = sorted(os.listdir(f'{data_dir}/input'))
@@ -84,20 +144,12 @@ for data in data_list:
             # Aplicando técnica de dilatação e erosão
             mask = smooth_image(mask, 3)
             # Encontrando os contornos na máscara
-            contours = find_contours(mask, level=0.5)
+            contours = find_contours(mask, level=0.5) # Retorno: um array numpy [N, (y, x)]
             # Salvando os contornos em um array numpy
-            if contours:
-                for contour in contours:
-                    if len(contour) > 2:
-                        new_contours = resample_closed_curve(contour, 79)
-                        for ind, point in enumerate(new_contours):
-                            endox[ind,0,frame] = point[1]
-                            endoy[ind,0,frame] = point[0]
-            endox[79,0,frame] = endox[0,0,frame]
-            endoy[79,0,frame] = endoy[0,0,frame]
+            generate_closed_curve(contours, endox, endoy, frame)
             # Plotando os contornos com os pontos originais
-            """ for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='black') """
+            for contour in contours:
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray')
             ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
                 
             # RVEndo
@@ -107,18 +159,10 @@ for data in data_list:
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
-            if contours:
-                for contour in contours:
-                    if len(contour) > 2:
-                        new_contours = resample_closed_curve(contour, 79)
-                        for ind, point in enumerate(new_contours):
-                            rvendox[ind,0,frame] = point[1]
-                            rvendoy[ind,0,frame] = point[0]
-            rvendox[79,0,frame] = rvendox[0,0,frame]
-            rvendoy[79,0,frame] = rvendoy[0,0,frame]
+            generate_closed_curve(contours, rvendox, rvendoy, frame)
             # Plotando os contornos com os pontos originais
-            """ for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='red') """
+            for contour in contours:
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray')
             ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
 
             # RVEpi
@@ -135,19 +179,10 @@ for data in data_list:
             # Extraindo contornos da segmentação completa com adição do padding
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos em um array numpy
-            if contours:
-                for contour in contours:
-                    if len(contour) > 2:
-                        new_contours = resample_closed_curve(contour, 79)
-                        for ind, point in enumerate(new_contours):
-                            rvepix[ind,0,frame] = point[1]
-                            rvepiy[ind,0,frame] = point[0]
-            # Fechando a curva
-            rvepiy[79,0,frame] = rvepiy[0,0,frame]
-            rvepix[79,0,frame] = rvepix[0,0,frame]
+            generate_closed_curve(contours, rvepix, rvepiy, frame)
             # Plotando os contornos com os pontos originais
-            """ for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=0.5, color='blue') """
+            for contour in contours:
+                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray')
             ax.plot(rvepiy[:,0,frame], rvepix[:,0,frame], linewidth=0.5, color='blue')
 
             # Salvando os contornos em imagens .jpg
@@ -155,7 +190,6 @@ for data in data_list:
             plt.axis('off')
             plt.savefig(contour_image_path, pad_inches=0)
             plt.close(fig)
-
             # Salvando os contornos em arquivos .txt 
             txt_path = os.path.join(f'{data_dir}/output/{data}/contours-txt', f'{fr}_{frame}_Endo.txt')
             with open(txt_path, 'w') as txt_file:
