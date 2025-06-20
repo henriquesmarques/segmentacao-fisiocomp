@@ -34,6 +34,12 @@ def resample_closed_curve(points, num_points=80):
     
     return np.stack([resampled_x, resampled_y], axis=1)
 
+def smooth_image(image, size_kernel):
+    kernel = np.ones((size_kernel, size_kernel))
+    image = dilate(image.astype(np.uint8), kernel, iterations=1)
+    image = erode(image.astype(np.uint8), kernel, iterations=1)
+    return image
+
 data_dir = os.getcwd()
 data_list = sorted(os.listdir(f'{data_dir}/input'))
 section = ['ED', 'ES']
@@ -76,9 +82,7 @@ for data in data_list:
             # Endo
             mask = (slice_2d == 1)
             # Aplicando técnica de dilatação e erosão
-            kernel = np.ones((3, 3))
-            mask = dilate(mask.astype(np.uint8), kernel, iterations=1)
-            mask = erode(mask.astype(np.uint8), kernel, iterations=1)
+            mask = smooth_image(mask, 3)
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
@@ -96,9 +100,7 @@ for data in data_list:
             # RVEndo
             mask = (slice_2d == 3)
             # Aplicando técnica de dilatação e erosão
-            kernel = np.ones((3, 3))
-            mask = dilate(mask.astype(np.uint8), kernel, iterations=1)
-            mask = erode(mask.astype(np.uint8), kernel, iterations=1)
+            mask = smooth_image(mask, 3)
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
@@ -123,9 +125,7 @@ for data in data_list:
             # Adicionando padding na imagem original
             slice_2d += mask
             # Aplicando técnica de dilatação e erosão
-            kernel = np.ones((3, 3))
-            slice_2d = dilate(slice_2d.astype(np.uint8), kernel, iterations=1)
-            slice_2d = erode(slice_2d.astype(np.uint8), kernel, iterations=1)
+            slice_2d = smooth_image(slice_2d, 3)
             # Extraindo contornos da segmentação completa com adição do padding
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos em um array numpy
@@ -179,9 +179,12 @@ for data in data_list:
             mat['setstruct']['RVEndoY'][0][0] = rvendoy
             mat['setstruct']['RVEpiX'][0][0] = rvepix
             mat['setstruct']['RVEpiY'][0][0] = rvepiy
-            savemat(f'{data_dir}/output/{data}/{data}_editado.mat', mat)
+            savemat(f'{data_dir}/output/{data}/{data}_{fr}_editado.mat', mat)
             print('  Salvando arquivo .MAT ...')
         else:
             print('  Erro: Variável "setstruct" não encontrada no arquivo .MAT')
-            
+        
+        # Verificação da fatia inicial
+        
+
 print ('  Find Contours done.')
