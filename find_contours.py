@@ -6,7 +6,8 @@ from scipy.interpolate import interp1d
 from nibabel import load # type: ignore
 from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
-
+from shapely.geometry import Polygon, Point # type: ignore
+    
 def smooth_image(image, size_kernel):
     """ 
     Aplicando técnica de dilatação para cobrir pequenas imperfeições e logo após a técnica 
@@ -17,12 +18,14 @@ def smooth_image(image, size_kernel):
     image = erode(image.astype(np.uint8), kernel, iterations=1)
     return image
 
-def generate_closed_curve(contours, x, y, frame):
+def generate_closed_curve(contours, x, y, frame, saida):
     """
     Atualiza os arrays x e y com exatamente 80 pontos da maior curva fechada informada.
     """
     if len(contours) == 1:
         contour = contours[0]
+        # retorna apenas o contorno válido
+        saida[frame] = contour
         if len(contour) > 2:
             new_contours = resample_closed_curve(contour, 79)
             for ind, point in enumerate(new_contours):
@@ -40,7 +43,7 @@ def generate_closed_curve(contours, x, y, frame):
             if area > maior_area:
                 maior_area = area
                 id_maior = i
-        generate_closed_curve([contours[id_maior]], x, y, frame)
+        generate_closed_curve([contours[id_maior]], x, y, frame, saida)
 
 def area_closed_curve(pontos):
     """
@@ -100,6 +103,35 @@ def resample_closed_curve(points, num_points):
     
     return np.stack([resampled_x, resampled_y], axis=1)
 
+def verifica_curva_contida(curva_interna_pontos, curva_externa_pontos):
+    """
+    Verifica se uma curva fechada está completamente contida dentro da área de outra curva fechada.
+
+    Args:
+        curva_interna_pontos (list of tuples): Uma lista de tuplas (x, y) representando os pontos
+                                               da curva que se deseja verificar se está contida.
+                                               A ordem dos pontos deve formar uma curva fechada.
+        curva_externa_pontos (list of tuples): Uma lista de tuplas (x, y) representando os pontos
+                                               da curva que representa a área externa.
+                                               A ordem dos pontos deve formar uma curva fechada.
+
+    Returns:
+        bool: True se a curva interna estiver completamente contida na curva externa, False caso contrário.
+    """
+    if len(curva_interna_pontos) < 3 or len(curva_externa_pontos) < 3:
+        return False
+
+    # Cria objetos Polygon a partir dos pontos.
+    # Shapely automaticamente fecha o polígono se o último ponto não for igual ao primeiro.
+    poligono_externo = Polygon(curva_externa_pontos)
+    poligono_interno = Polygon(curva_interna_pontos)
+
+    # Verifica se o polígono interno está contido dentro do polígono externo
+    if (poligono_externo.contains(poligono_interno)):
+        return True
+    else:
+        return False
+
 data_dir = os.getcwd()
 data_list = sorted(os.listdir(f'{data_dir}/input'))
 section = ['ED', 'ES']
@@ -132,6 +164,10 @@ for data in data_list:
         rvendoy = np.full((80,1,Z), np.nan)
         rvepix = np.full((80,1,Z), np.nan)
         rvepiy = np.full((80,1,Z), np.nan)
+        nan = np.full((80,1,1), np.nan)
+        endo = [[] for _ in range(17)]
+        rvendo = [[] for _ in range(17)]
+        rvepi = [[] for _ in range(17)]
         
         for frame in range(Z):
             # Convertendo a imagem para 2D
@@ -146,7 +182,7 @@ for data in data_list:
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5) # Retorno: um array numpy [N, (y, x)]
             # Salvando os contornos em um array numpy
-            generate_closed_curve(contours, endox, endoy, frame)
+            generate_closed_curve(contours, endox, endoy, frame, endo)
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -158,7 +194,7 @@ for data in data_list:
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
-            generate_closed_curve(contours, rvendox, rvendoy, frame)
+            generate_closed_curve(contours, rvendox, rvendoy, frame, rvendo)
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -177,7 +213,7 @@ for data in data_list:
             # Extraindo contornos da segmentação completa com adição do padding
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos em um array numpy
-            generate_closed_curve(contours, rvepix, rvepiy, frame)
+            generate_closed_curve(contours, rvepix, rvepiy, frame, rvepi)
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -192,7 +228,7 @@ for data in data_list:
             plt.close(fig) """
 
         # Removendo contorno do endocárdio das primeiras fatias
-        frame = 2
+        """ frame = 2
         while (frame >= 0):
             if np.isnan(endox[0,0,frame]) or np.isnan(rvendox[0,0,frame]):
                 if not np.isnan(rvepix[0,0,frame]):
@@ -204,8 +240,27 @@ for data in data_list:
                             for ind in range(80):
                                 endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
                         frame = frame - 1
-            frame = frame - 1
+            frame = frame - 1 """
+        
+        # Fatias iniciais
+        for frame in range(Z):
+            if not np.isnan(rvepix[0,0,frame]):
+                for ind in range(80):
+                    endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = np.nan
+                break
 
+        # Fatias finais
+        frame = int(Z/2)
+        while frame < Z:
+            if (verifica_curva_contida(endo[frame], rvepi[frame]) == False or verifica_curva_contida(rvendo[frame], rvepi[frame]) == False):
+                for ind in range(80):
+                    endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
+                while (frame < Z):
+                    for ind in range(80):
+                        endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
+                    frame += 1
+            frame += 1
+        
         for frame in range(Z):
             # Salvando os contornos em arquivos .txt 
             contour_data = [("Endo", endox, endoy),("RVEndo", rvendox, rvendoy), ("RVEpi", rvepix, rvepiy)]
