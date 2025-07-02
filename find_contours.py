@@ -165,9 +165,10 @@ for data in data_list:
         rvepix = np.full((80,1,Z), np.nan)
         rvepiy = np.full((80,1,Z), np.nan)
         nan = np.full((80,1,1), np.nan)
-        endo = [[] for _ in range(17)]
-        rvendo = [[] for _ in range(17)]
-        rvepi = [[] for _ in range(17)]
+        endo = [[] for _ in range(Z)]
+        rvendo = [[] for _ in range(Z)]
+        rvepi = [[] for _ in range(Z)]
+        id = Z - 1
         
         for frame in range(Z):
             # Convertendo a imagem para 2D
@@ -182,7 +183,7 @@ for data in data_list:
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5) # Retorno: um array numpy [N, (y, x)]
             # Salvando os contornos em um array numpy
-            generate_closed_curve(contours, endox, endoy, frame, endo)
+            generate_closed_curve(contours, endox, endoy, id, endo)
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -194,7 +195,7 @@ for data in data_list:
             # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
             # Salvando os contornos em um array numpy
-            generate_closed_curve(contours, rvendox, rvendoy, frame, rvendo)
+            generate_closed_curve(contours, rvendox, rvendoy, id, rvendo)
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -213,7 +214,9 @@ for data in data_list:
             # Extraindo contornos da segmentação completa com adição do padding
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos em um array numpy
-            generate_closed_curve(contours, rvepix, rvepiy, frame, rvepi)
+            generate_closed_curve(contours, rvepix, rvepiy, id, rvepi)
+            
+            id = id - 1
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -242,20 +245,22 @@ for data in data_list:
                         frame = frame - 1
             frame = frame - 1 """
         
-        # Fatias iniciais
-        for frame in range(Z):
+        # Fatias "iniciais"
+        frame = Z - 1
+        while frame > 0:
             if not np.isnan(rvepix[0,0,frame]):
                 endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = nan[:,0,0]
                 break
+            frame -= 1
 
-        # Fatias finais
-        frame = int(Z/2)
-        while frame < Z:
+        # Fatias "finais"
+        frame = 0
+        while frame < int(Z/2):
             if (verifica_curva_contida(endo[frame], rvepi[frame]) == False or verifica_curva_contida(rvendo[frame], rvepi[frame]) == False):
                 endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
-                while (frame < Z):
+                """ while (frame < Z):
                     endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
-                    frame += 1
+                    frame += 1 """
             frame += 1
         
         for frame in range(Z):
