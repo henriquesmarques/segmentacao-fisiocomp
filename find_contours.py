@@ -245,19 +245,16 @@ for data in data_list:
         # Fatias iniciais
         for frame in range(Z):
             if not np.isnan(rvepix[0,0,frame]):
-                for ind in range(80):
-                    endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = np.nan
+                endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = nan[:,0,0]
                 break
 
         # Fatias finais
         frame = int(Z/2)
         while frame < Z:
             if (verifica_curva_contida(endo[frame], rvepi[frame]) == False or verifica_curva_contida(rvendo[frame], rvepi[frame]) == False):
-                for ind in range(80):
-                    endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
+                endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
                 while (frame < Z):
-                    for ind in range(80):
-                        endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
+                    endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
                     frame += 1
             frame += 1
         
