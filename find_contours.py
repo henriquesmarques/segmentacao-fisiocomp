@@ -1,8 +1,8 @@
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.io import loadmat, savemat
-from scipy.interpolate import interp1d
+import numpy as np # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+from scipy.io import loadmat, savemat # type: ignore
+from scipy.interpolate import interp1d # type: ignore
 from nibabel import load # type: ignore
 from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
@@ -139,12 +139,14 @@ section = ['ED', 'ES']
 for data in data_list:
     os.makedirs(os.path.join(f'{data_dir}/output/{data}', 'contours-txt'), exist_ok=True)
     os.makedirs(os.path.join(f'{data_dir}/output/{data}', 'contours-png'), exist_ok=True)
+    flag_mat = True
     try:
         mat_path = f'{data_dir}/input/{data}/{data}.mat'
         mat = loadmat(mat_path)
         print(f'  Reading {mat_path} ...')
     except FileNotFoundError:
         print('  Erro: Arquivo .MAT não encontrado.')
+        flag_mat = False
 
     for fr in section:
         # Lendo a imagem
@@ -229,40 +231,38 @@ for data in data_list:
             plt.axis('off')
             plt.savefig(contour_image_path, pad_inches=0)
             plt.close(fig) """
-
-        # Removendo contorno do endocárdio das primeiras fatias
-        """ frame = 2
-        while (frame >= 0):
-            if np.isnan(endox[0,0,frame]) or np.isnan(rvendox[0,0,frame]):
-                if not np.isnan(rvepix[0,0,frame]):
-                    for ind in range(80):
-                        endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = np.nan
-                    frame = frame - 1
-                    while (frame >= 0):
-                        if not np.isnan(endox[0,0,frame]) or not np.isnan(rvendox[0,0,frame]) or not np.isnan(rvepix[0,0,frame]):
-                            for ind in range(80):
-                                endox[ind,0,frame] = endoy[ind,0,frame] = rvendox[ind,0,frame] = rvendoy[ind,0,frame] = rvepix[ind,0,frame] = rvepiy[ind,0,frame] = np.nan
-                        frame = frame - 1
-            frame = frame - 1 """
         
-        # Fatias "iniciais"
+        # Removendo contorno do endocárdio da fatia final
         frame = Z - 1
-        while frame > 0:
+        while frame >= 0:
             if not np.isnan(rvepix[0,0,frame]):
                 endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = nan[:,0,0]
                 break
             frame -= 1
 
-        # Fatias "finais"
-        frame = 0
-        while frame < int(Z/2):
+        # Verificando se está contido dentro do epicárdio
+        for frame in range(int(Z/2)):
             if (verifica_curva_contida(endo[frame], rvepi[frame]) == False or verifica_curva_contida(rvendo[frame], rvepi[frame]) == False):
-                endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
-                """ while (frame < Z):
+                while frame >= 0:
                     endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
-                    frame += 1 """
-            frame += 1
+                    frame -= 1
+            if frame == -1: 
+                break
         
+        # Verificando tamanho área do epicárdio nas fatias inciais
+        frame = int(Z / 2)
+        while frame >= 0:
+            tolerancia = 500
+            if len(rvepi[frame]) != 0:
+                print(f'Fatia {frame}: {area_closed_curve(rvepi[frame])}')
+                if (area_closed_curve(rvepi[frame]) > area_closed_curve(rvepi[frame-1]) + tolerancia):
+                    frame -= 1
+                    while (frame >= 0):
+                        endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
+                        frame -= 1
+            frame -= 1
+        
+        # Salvando
         for frame in range(Z):
             # Salvando os contornos em arquivos .txt 
             contour_data = [("Endo", endox, endoy),("RVEndo", rvendox, rvendoy), ("RVEpi", rvepix, rvepiy)]
@@ -286,16 +286,17 @@ for data in data_list:
             plt.close(fig)
 
         # Reescrevendo arquivo .MAT
-        if 'setstruct' in mat: 
-            mat['setstruct']['EndoX'][0][0] = endox
-            mat['setstruct']['EndoY'][0][0] = endoy
-            mat['setstruct']['RVEndoX'][0][0] = rvendox
-            mat['setstruct']['RVEndoY'][0][0] = rvendoy
-            mat['setstruct']['RVEpiX'][0][0] = rvepix
-            mat['setstruct']['RVEpiY'][0][0] = rvepiy
-            savemat(f'{data_dir}/output/{data}/{data}_{fr}_editado.mat', mat)
-            print('  Salvando arquivo .MAT ...')
-        else:
-            print('  Erro: Variável "setstruct" não encontrada no arquivo .MAT')
+        if flag_mat:
+            if 'setstruct' in mat: 
+                mat['setstruct']['EndoX'][0][0] = endox
+                mat['setstruct']['EndoY'][0][0] = endoy
+                mat['setstruct']['RVEndoX'][0][0] = rvendox
+                mat['setstruct']['RVEndoY'][0][0] = rvendoy
+                mat['setstruct']['RVEpiX'][0][0] = rvepix
+                mat['setstruct']['RVEpiY'][0][0] = rvepiy
+                savemat(f'{data_dir}/output/{data}/{data}_{fr}_editado.mat', mat)
+                print('  Salvando arquivo .MAT ...')
+            else:
+                print('  Erro: Variável "setstruct" não encontrada no arquivo .MAT')
 
 print ('  Find Contours done.')
