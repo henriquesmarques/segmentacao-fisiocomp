@@ -13,9 +13,9 @@ def smooth_image(image, size_kernel):
     Aplicando técnica de dilatação para cobrir pequenas imperfeições e logo após a técnica 
     de erosão para voltar ao tamanho original.
     """
-    kernel = np.ones((size_kernel, size_kernel))
+    """ kernel = np.ones((size_kernel, size_kernel))
     image = dilate(image.astype(np.uint8), kernel, iterations=1)
-    image = erode(image.astype(np.uint8), kernel, iterations=1)
+    image = erode(image.astype(np.uint8), kernel, iterations=1) """
     return image
 
 def generate_closed_curve(contours, x, y, frame, saida):
@@ -170,9 +170,11 @@ for data in data_list:
         endo = [[] for _ in range(Z)]
         rvendo = [[] for _ in range(Z)]
         rvepi = [[] for _ in range(Z)]
-        id = Z - 1
+
+        mask_rvepi = [[] for _ in range(Z)]
         
         for frame in range(Z):
+            id = Z - 1 - frame
             # Convertendo a imagem para 2D
             slice_2d = image[:, :, frame]
             """ # Definindo tamanho da plotagem
@@ -213,12 +215,12 @@ for data in data_list:
             slice_2d += mask
             # Aplicando técnica de dilatação e erosão
             slice_2d = smooth_image(slice_2d, 3)
+            mask_rvepi[id] = slice_2d
             # Extraindo contornos da segmentação completa com adição do padding
             contours = find_contours(slice_2d, level=0.1)
             # Salvando os contornos em um array numpy
             generate_closed_curve(contours, rvepix, rvepiy, id, rvepi)
             
-            id = id - 1
             # Plotando os contornos com os pontos originais
             """ for contour in contours:
                 ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
@@ -232,13 +234,22 @@ for data in data_list:
             plt.savefig(contour_image_path, pad_inches=0)
             plt.close(fig) """
         
-        # Removendo contorno do endocárdio da fatia final
+        # Criando fatia artificial no final
         frame = Z - 1
-        while frame >= 0:
-            if not np.isnan(rvepix[0,0,frame]):
-                endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = nan[:,0,0]
-                break
-            frame -= 1
+        if len(rvepi[frame]) == 0:
+            while frame >= 0:
+                if not np.isnan(rvepix[0,0,frame]):
+                    """ Usar erosão para diminuir última fatia """
+                    # Aplicando técnica de erosão
+                    kernel_size = 3
+                    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+                    mask = erode(mask_rvepi[frame].astype(np.uint8), kernel, iterations=2)
+                    # Extraindo contornos da segmentação completa com adição do padding
+                    contours = find_contours(mask, level=0.1)
+                    # Salvando os contornos em um array numpy
+                    generate_closed_curve(contours, rvepix, rvepiy, frame+1, rvepi)
+                    break
+                frame -= 1
 
         # Verificando se está contido dentro do epicárdio
         for frame in range(int(Z/2)):
@@ -248,20 +259,20 @@ for data in data_list:
                     frame -= 1
             if frame == -1: 
                 break
-        
+
         # Verificando tamanho área do epicárdio nas fatias inciais
         frame = int(Z / 2)
         while frame >= 0:
-            tolerancia = 500
+            tolerancia = 400
             if len(rvepi[frame]) != 0:
-                print(f'Fatia {frame}: {area_closed_curve(rvepi[frame])}')
+                # print(f'Fatia {frame}: {area_closed_curve(rvepi[frame])}')
                 if (area_closed_curve(rvepi[frame]) > area_closed_curve(rvepi[frame-1]) + tolerancia):
                     frame -= 1
                     while (frame >= 0):
                         endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
                         frame -= 1
             frame -= 1
-        
+
         # Salvando
         for frame in range(Z):
             # Salvando os contornos em arquivos .txt 
