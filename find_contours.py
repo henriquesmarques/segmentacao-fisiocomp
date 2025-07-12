@@ -2,12 +2,12 @@ import os
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from scipy.io import loadmat, savemat # type: ignore
-from scipy.interpolate import interp1d # type: ignore
+from scipy.interpolate import interp1d, splprep, splev # type: ignore
 from nibabel import load # type: ignore
 from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
 from shapely.geometry import Polygon, Point # type: ignore
-    
+
 def smooth_image(image, size_kernel):
     """ 
     Aplicando técnica de dilatação para cobrir pequenas imperfeições e logo após a técnica 
@@ -18,6 +18,33 @@ def smooth_image(image, size_kernel):
     image = erode(image.astype(np.uint8), kernel, iterations=1) """
     return image
 
+def resample_closed_curve(points, num_points):
+    points = np.asarray(points)
+    
+    # Close the curve if needed
+    if not np.allclose(points[0], points[-1]):
+        points = np.vstack([points, points[0]])
+
+    # Compute cumulative distances (arc lengths)
+    deltas = np.diff(points, axis=0)
+    segment_lengths = np.linalg.norm(deltas, axis=1)
+    arc_lengths = np.concatenate([[0], np.cumsum(segment_lengths)])
+    
+    # Total length of the curve
+    total_length = arc_lengths[-1]
+    
+    # Create uniform arc lengths
+    target_lengths = np.linspace(0, total_length, num_points, endpoint=False)
+    
+    # Interpolate in x and y separately
+    interp_x = interp1d(arc_lengths, points[:, 0], kind='cubic')
+    interp_y = interp1d(arc_lengths, points[:, 1], kind='cubic')
+    
+    resampled_x = interp_x(target_lengths)
+    resampled_y = interp_y(target_lengths)
+    
+    return np.stack([resampled_x, resampled_y], axis=1)
+
 def generate_closed_curve(contours, x, y, frame, saida):
     """
     Atualiza os arrays x e y com exatamente 80 pontos da maior curva fechada informada.
@@ -27,7 +54,8 @@ def generate_closed_curve(contours, x, y, frame, saida):
         # retorna apenas o contorno válido
         saida[frame] = contour
         if len(contour) > 2:
-            new_contours = resample_closed_curve(contour, num_pontos)
+            # new_contours = resample_closed_curve(contour, num_pontos)
+            new_contours = smooth_closed_curve(contour, 15, 80)
             for ind, point in enumerate(new_contours):
                 x[ind, 0, frame] = point[1]
                 y[ind, 0, frame] = point[0]
@@ -75,33 +103,43 @@ def calculate_area_closed_curve(pontos):
 
     area = 0.5 * abs(soma_primeiro_termo - soma_segundo_termo)
     return area
-        
-def resample_closed_curve(points, num_points):
-    points = np.asarray(points)
-    
-    # Close the curve if needed
-    if not np.allclose(points[0], points[-1]):
-        points = np.vstack([points, points[0]])
 
-    # Compute cumulative distances (arc lengths)
-    deltas = np.diff(points, axis=0)
-    segment_lengths = np.linalg.norm(deltas, axis=1)
-    arc_lengths = np.concatenate([[0], np.cumsum(segment_lengths)])
-    
-    # Total length of the curve
-    total_length = arc_lengths[-1]
-    
-    # Create uniform arc lengths
-    target_lengths = np.linspace(0, total_length, num_points, endpoint=False)
-    
-    # Interpolate in x and y separately
-    interp_x = interp1d(arc_lengths, points[:, 0], kind='cubic')
-    interp_y = interp1d(arc_lengths, points[:, 1], kind='cubic')
-    
-    resampled_x = interp_x(target_lengths)
-    resampled_y = interp_y(target_lengths)
-    
-    return np.stack([resampled_x, resampled_y], axis=1)
+def smooth_closed_curve(pontos: list, fator_suavizacao: float = 1.0, num_pontos_resultado: int = 80) -> np.ndarray:
+    """
+    Suaviza uma curva 2D fechada usando interpolação por splines.
+
+    Args:
+        pontos (list): Uma lista de tuplas ou listas com as coordenadas (x, y) dos pontos da curva.
+                       Ex: [(x1, y1), (x2, y2), ...]
+        fator_suavizacao (float): O fator de suavização (parâmetro 's' do splprep).
+                                  s=0: a curva passará por todos os pontos.
+                                  s>0: a curva será mais suave. O padrão é 1.0.
+        num_pontos_resultado (int): O número de pontos que a curva suavizada final terá. O padrão é 100.
+
+    Returns:
+        np.ndarray: Um array NumPy de formato (num_pontos_resultado, 2) com os pontos (x, y) da curva suavizada.
+                    Retorna um array vazio se a entrada for insuficiente.
+    """
+    # Validação da entrada: splprep precisa de pelo menos k+1 pontos, onde k=3 (grau cúbico)
+    if len(pontos) < 4:
+        # Retorna um array vazio ou os pontos originais, dependendo do que for mais útil para o seu caso.
+        # Um array vazio é mais seguro para evitar erros inesperados.
+        return np.array([])
+
+    # 1. Descompactar a lista de pontos em coordenadas x e y separadas
+    x_coords, y_coords = zip(*pontos)
+
+    # 2. Calcular o modelo do spline (tck)
+    #    per=True é essencial para tratar a curva como fechada. k=3 é para splines cúbicos.
+    tck, u = splprep([x_coords, y_coords], s=fator_suavizacao, k=3, per=True)
+
+    # 3. Gerar os pontos da nova curva suave
+    u_new = np.linspace(u.min(), u.max(), num_pontos_resultado)
+    x_spline, y_spline = splev(u_new, tck, der=0)
+
+    # 4. Empacotar os resultados em um único array NumPy de formato (N, 2) e retorná-lo
+    pontos_suavizados = np.vstack((x_spline, y_spline)).T
+    return pontos_suavizados
 
 def check_contained_curve(curva_interna_pontos, curva_externa_pontos):
     """
