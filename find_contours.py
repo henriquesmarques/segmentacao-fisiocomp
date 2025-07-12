@@ -27,25 +27,25 @@ def generate_closed_curve(contours, x, y, frame, saida):
         # retorna apenas o contorno válido
         saida[frame] = contour
         if len(contour) > 2:
-            new_contours = resample_closed_curve(contour, 79)
+            new_contours = resample_closed_curve(contour, num_pontos)
             for ind, point in enumerate(new_contours):
                 x[ind, 0, frame] = point[1]
                 y[ind, 0, frame] = point[0]
             # Fechando a curva
-            x[79, 0, frame] = x[0, 0, frame]
-            y[79, 0, frame] = y[0, 0, frame]
+            x[-1, 0, frame] = x[0, 0, frame]
+            y[-1, 0, frame] = y[0, 0, frame]
 
     elif len(contours) > 1:
         maior_area = 0.0
         id_maior = 0
         for i, contour in enumerate(contours):
-            area = area_closed_curve(contour)
+            area = calculate_area_closed_curve(contour)
             if area > maior_area:
                 maior_area = area
                 id_maior = i
         generate_closed_curve([contours[id_maior]], x, y, frame, saida)
 
-def area_closed_curve(pontos):
+def calculate_area_closed_curve(pontos):
     """
     Calcula a área de uma curva fechada (polígono) usando a Fórmula de Shoelace.
 
@@ -103,7 +103,7 @@ def resample_closed_curve(points, num_points):
     
     return np.stack([resampled_x, resampled_y], axis=1)
 
-def verifica_curva_contida(curva_interna_pontos, curva_externa_pontos):
+def check_contained_curve(curva_interna_pontos, curva_externa_pontos):
     """
     Verifica se uma curva fechada está completamente contida dentro da área de outra curva fechada.
 
@@ -160,52 +160,42 @@ for data in data_list:
         nim = load(image_name)
         image = nim.get_fdata()
         X, Y, Z = image.shape
-        endox = np.full((80,1,Z), np.nan)
-        endoy = np.full((80,1,Z), np.nan)
-        rvendox = np.full((80,1,Z), np.nan)
-        rvendoy = np.full((80,1,Z), np.nan)
-        rvepix = np.full((80,1,Z), np.nan)
-        rvepiy = np.full((80,1,Z), np.nan)
-        nan = np.full((80,1,1), np.nan)
+        num_pontos = 80
+        endox = np.full((num_pontos,1,Z), np.nan)
+        endoy = np.full((num_pontos,1,Z), np.nan)
+        rvendox = np.full((num_pontos,1,Z), np.nan)
+        rvendoy = np.full((num_pontos,1,Z), np.nan)
+        epix = np.full((num_pontos,1,Z), np.nan)
+        epiy = np.full((num_pontos,1,Z), np.nan)
+        rvepix = np.full((num_pontos,1,Z), np.nan)
+        rvepiy = np.full((num_pontos,1,Z), np.nan)
+        nan = np.full((num_pontos,1,1), np.nan)
         endo = [[] for _ in range(Z)]
+        epi = [[] for _ in range(Z)]
         rvendo = [[] for _ in range(Z)]
         rvepi = [[] for _ in range(Z)]
-
         mask_rvepi = [[] for _ in range(Z)]
         
+        """ Extraindo contorno das fatias segmentadas """
         for frame in range(Z):
+            # Invertendo ordem de armazenamento
             id = Z - 1 - frame
-            # Convertendo a imagem para 2D
             slice_2d = image[:, :, frame]
-            """ # Definindo tamanho da plotagem
-            fig, ax = plt.subplots(figsize=(Y / 25, X / 25)) """
 
-            # Endo
+            """ Endo """
             mask = (slice_2d == 1)
-            # Aplicando técnica de dilatação e erosão
             mask = smooth_image(mask, 3)
-            # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5) # Retorno: um array numpy [N, (y, x)]
-            # Salvando os contornos em um array numpy
             generate_closed_curve(contours, endox, endoy, id, endo)
-            # Plotando os contornos com os pontos originais
-            """ for contour in contours:
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
                 
-            # RVEndo
+            """ RVEndo """
             mask = (slice_2d == 3)
-            # Aplicando técnica de dilatação e erosão
             mask = smooth_image(mask, 3)
-            # Encontrando os contornos na máscara
             contours = find_contours(mask, level=0.5)
-            # Salvando os contornos em um array numpy
             generate_closed_curve(contours, rvendox, rvendoy, id, rvendo)
-            # Plotando os contornos com os pontos originais
-            """ for contour in contours:
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
 
-            # RVEpi
-            # Técnica de dilatação
+            """ RVEpi """
+            # Usando técnica de dilatação para criar um padding no RVEndo simulando seu epicárdio
             kernel_size = 3
             kernel = np.ones((kernel_size, kernel_size), np.uint8)
             mask = dilate(mask.astype(np.uint8), kernel, iterations=1)
@@ -213,70 +203,82 @@ for data in data_list:
             mask = mask & ~(slice_2d == 2)
             # Adicionando padding na imagem original
             slice_2d += mask
-            # Aplicando técnica de dilatação e erosão
+            # Suavizando superfície
             slice_2d = smooth_image(slice_2d, 3)
+            # Salvando máscaras do RVEpi
             mask_rvepi[id] = slice_2d
-            # Extraindo contornos da segmentação completa com adição do padding
+            # Extraindo os contornos
             contours = find_contours(slice_2d, level=0.1)
-            # Salvando os contornos em um array numpy
             generate_closed_curve(contours, rvepix, rvepiy, id, rvepi)
-            
-            # Plotando os contornos com os pontos originais
-            """ for contour in contours:
-                ax.plot(contour[:, 0], contour[:, 1], linewidth=0.5, color='gray') """
 
-            """ # Salvando os contornos em imagens .jpg
-            ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
-            ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
-            ax.plot(rvepiy[:,0,frame], rvepix[:,0,frame], linewidth=0.5, color='blue')
-            contour_image_path = os.path.join(f'{data_dir}/output/{data}/contours-png', f'{fr}_{frame}.png')
-            plt.axis('off')
-            plt.savefig(contour_image_path, pad_inches=0)
-            plt.close(fig) """
-        
-        # Criando fatia artificial no final
-        frame = Z - 1
-        if len(rvepi[frame]) == 0:
-            while frame >= 0:
-                if not np.isnan(rvepix[0,0,frame]):
-                    """ Usar erosão para diminuir última fatia """
-                    # Aplicando técnica de erosão
-                    kernel_size = 3
-                    kernel = np.ones((kernel_size, kernel_size), np.uint8)
-                    mask = erode(mask_rvepi[frame].astype(np.uint8), kernel, iterations=2)
-                    # Extraindo contornos da segmentação completa com adição do padding
-                    contours = find_contours(mask, level=0.1)
-                    # Salvando os contornos em um array numpy
-                    generate_closed_curve(contours, rvepix, rvepiy, frame+1, rvepi)
-                    break
-                frame -= 1
+            """ Epi """
+            mask = (slice_2d == 2)
+            contours = find_contours(mask, level=0.5)
+            generate_closed_curve(contours, epix, epiy, id, epi)
 
-        # Verificando se está contido dentro do epicárdio
+        """ Verificando se o Endo e o RVEndo estão contidos no RVEpi """
         for frame in range(int(Z/2)):
-            if (verifica_curva_contida(endo[frame], rvepi[frame]) == False or verifica_curva_contida(rvendo[frame], rvepi[frame]) == False):
-                while frame >= 0:
-                    endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
-                    frame -= 1
+            if ((check_contained_curve(endo[frame], rvepi[frame]) == False) or (check_contained_curve(rvendo[frame], rvepi[frame]) == False)):
+                ind = frame
+                while ind >= 0:
+                    endox[:,0,ind] = endoy[:,0,ind] = rvendox[:,0,ind] = rvendoy[:,0,ind] = rvepix[:,0,ind] = rvepiy[:,0,ind] = epix[:,0,ind] = epiy[:,0,ind] = nan[:,0,0]
+                    ind -= 1
             if frame == -1: 
                 break
+        while frame < Z:
+            if ((check_contained_curve(endo[frame], rvepi[frame]) == False) and (len(endo[frame]) != 0)) or ((check_contained_curve(rvendo[frame], rvepi[frame]) == False) and (len(rvendo[frame]) != 0)):
+                while frame < Z:
+                    endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = epix[:,0,frame] = epiy[:,0,frame] = nan[:,0,0]
+                    frame += 1
+            frame += 1
 
-        # Verificando tamanho área do epicárdio nas fatias inciais
+        """ Verificando o tamanho da área do epicárdio nas fatias iniciais """
         frame = int(Z / 2)
         while frame >= 0:
             tolerancia = 400
             if len(rvepi[frame]) != 0:
-                # print(f'Fatia {frame}: {area_closed_curve(rvepi[frame])}')
-                if (area_closed_curve(rvepi[frame]) > area_closed_curve(rvepi[frame-1]) + tolerancia):
+                if (calculate_area_closed_curve(rvepi[frame]) > calculate_area_closed_curve(rvepi[frame-1]) + tolerancia):
                     frame -= 1
                     while (frame >= 0):
-                        endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = nan[:,0,0]
+                        endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = epix[:,0,frame] = epiy[:,0,frame] = nan[:,0,0]
                         frame -= 1
             frame -= 1
 
-        # Salvando
+        """ Usando a técnica de erosão para criar uma fatia final menor que a anterior artificialmente """
+        frame = Z - 1
+        while frame >= 0:
+            if not np.isnan(rvepix[0,0,frame]):
+                # Aplicando técnica de erosão
+                kernel_size = 3
+                kernel = np.ones((kernel_size, kernel_size), np.uint8)
+                mask = erode(mask_rvepi[frame].astype(np.uint8), kernel, iterations=2)
+                # Extraindo contornos da segmentação completa com adição do padding
+                contours = find_contours(mask, level=0.1)
+                # Salvando os contornos em um array numpy
+                if np.isnan(rvepix[0,0,Z-1]):
+                    generate_closed_curve(contours, rvepix, rvepiy, frame+1, rvepi)
+                else:
+                    contours = find_contours(mask_rvepi[frame], level=0.1)
+                    endox = np.concatenate((endox, nan), axis=2)
+                    endoy = np.concatenate((endoy, nan), axis=2)
+                    rvendox = np.concatenate((rvendox, nan), axis=2)
+                    rvendoy = np.concatenate((rvendoy, nan), axis=2)
+                    epix = np.concatenate((epix, nan), axis=2)
+                    epiy = np.concatenate((epiy, nan), axis=2)
+                    new_rvepix = np.full((num_pontos,1,1), np.nan)
+                    new_rvepiy = np.full((num_pontos,1,1), np.nan)
+                    rvepi.append([])
+                    generate_closed_curve(contours, new_rvepix, new_rvepiy, 0, rvepi)
+                    rvepix = np.concatenate((rvepix, new_rvepix), axis=2)
+                    rvepiy = np.concatenate((rvepiy, new_rvepiy), axis=2)
+                    Z += 1
+                break
+            frame -= 1
+
+        # Salvando os contornos
         for frame in range(Z):
-            # Salvando os contornos em arquivos .txt 
-            contour_data = [("Endo", endox, endoy),("RVEndo", rvendox, rvendoy), ("RVEpi", rvepix, rvepiy)]
+            # Arquivos .txt 
+            contour_data = [("Endo", endox, endoy),("Epi", epix, epiy), ("RVEndo", rvendox, rvendoy), ("RVEpi", rvepix, rvepiy)]
             for prefix, x_array, y_array in contour_data:
                 txt_path = os.path.join(f'{data_dir}/output/{data}/contours-txt', f'{fr}_{frame}_{prefix}.txt')
                 with open(txt_path, 'w') as txt_file:
@@ -286,9 +288,10 @@ for data in data_list:
                         else:
                             txt_file.write(f'{x_array[ind,0,frame]:.6f} {y_array[ind,0,frame]:.6f} 0\n')
 
-            # Salvando os contornos em imagens .jpg
+            # Imagens .jpg
             fig, ax = plt.subplots(figsize=(Y / 25, X / 25))
             ax.plot(endoy[:,0,frame], endox[:,0,frame], linewidth=0.5, color='black')
+            ax.plot(epiy[:,0,frame], epix[:,0,frame], linewidth=0.5, color='green')
             ax.plot(rvendoy[:,0,frame], rvendox[:,0,frame], linewidth=0.5, color='red')
             ax.plot(rvepiy[:,0,frame], rvepix[:,0,frame], linewidth=0.5, color='blue')
             contour_image_path = os.path.join(f'{data_dir}/output/{data}/contours-png', f'{fr}_{frame}.png')
@@ -303,6 +306,8 @@ for data in data_list:
                 mat['setstruct']['EndoY'][0][0] = endoy
                 mat['setstruct']['RVEndoX'][0][0] = rvendox
                 mat['setstruct']['RVEndoY'][0][0] = rvendoy
+                mat['setstruct']['EpiX'][0][0] = epix
+                mat['setstruct']['EpiY'][0][0] = epiy
                 mat['setstruct']['RVEpiX'][0][0] = rvepix
                 mat['setstruct']['RVEpiY'][0][0] = rvepiy
                 savemat(f'{data_dir}/output/{data}/{data}_{fr}_editado.mat', mat)
