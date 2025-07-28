@@ -8,15 +8,33 @@ from cv2 import dilate, erode # type: ignore
 from skimage.measure import find_contours # type: ignore
 from shapely.geometry import Polygon, Point # type: ignore
 
-def smooth_image(image, size_kernel):
-    """ 
-    Aplicando técnica de dilatação para cobrir pequenas imperfeições e logo após a técnica 
-    de erosão para voltar ao tamanho original.
+def generate_closed_curve(contours, x, y, frame, saida):
     """
-    """ kernel = np.ones((size_kernel, size_kernel))
-    image = dilate(image.astype(np.uint8), kernel, iterations=1)
-    image = erode(image.astype(np.uint8), kernel, iterations=1) """
-    return image
+    Atualiza os arrays x e y com exatamente 80 pontos da maior curva fechada informada.
+    """
+    if len(contours) == 1:
+        contour = contours[0]
+        # retorna apenas o contorno válido
+        saida[frame] = contour
+        if len(contour) > 2:
+            new_contours = resample_closed_curve(contour, num_pontos)
+            # new_contours = smooth_closed_curve(contour, 15, 80)
+            for ind, point in enumerate(new_contours):
+                x[ind, 0, frame] = point[1]
+                y[ind, 0, frame] = point[0]
+            # Fechando a curva
+            x[-1, 0, frame] = x[0, 0, frame]
+            y[-1, 0, frame] = y[0, 0, frame]
+
+    elif len(contours) > 1:
+        maior_area = 0.0
+        id_maior = 0
+        for i, contour in enumerate(contours):
+            area = calculate_area_closed_curve(contour)
+            if area > maior_area:
+                maior_area = area
+                id_maior = i
+        generate_closed_curve([contours[id_maior]], x, y, frame, saida)
 
 def resample_closed_curve(points, num_points):
     points = np.asarray(points)
@@ -44,65 +62,6 @@ def resample_closed_curve(points, num_points):
     resampled_y = interp_y(target_lengths)
     
     return np.stack([resampled_x, resampled_y], axis=1)
-
-def generate_closed_curve(contours, x, y, frame, saida):
-    """
-    Atualiza os arrays x e y com exatamente 80 pontos da maior curva fechada informada.
-    """
-    if len(contours) == 1:
-        contour = contours[0]
-        # retorna apenas o contorno válido
-        saida[frame] = contour
-        if len(contour) > 2:
-            # new_contours = resample_closed_curve(contour, num_pontos)
-            new_contours = smooth_closed_curve(contour, 15, 80)
-            for ind, point in enumerate(new_contours):
-                x[ind, 0, frame] = point[1]
-                y[ind, 0, frame] = point[0]
-            # Fechando a curva
-            x[-1, 0, frame] = x[0, 0, frame]
-            y[-1, 0, frame] = y[0, 0, frame]
-
-    elif len(contours) > 1:
-        maior_area = 0.0
-        id_maior = 0
-        for i, contour in enumerate(contours):
-            area = calculate_area_closed_curve(contour)
-            if area > maior_area:
-                maior_area = area
-                id_maior = i
-        generate_closed_curve([contours[id_maior]], x, y, frame, saida)
-
-def calculate_area_closed_curve(pontos):
-    """
-    Calcula a área de uma curva fechada (polígono) usando a Fórmula de Shoelace.
-
-    Args:
-        pontos: Uma lista de tuplas, onde cada tupla (x, y) representa um ponto
-                no plano cartesiano que compõe a curva fechada.
-                Os pontos devem estar em ordem sequencial (horário ou anti-horário).
-
-    Returns:
-        A área da curva fechada (polígono) como um float.
-        Retorna 0.0 se a lista de pontos tiver menos de 3 pontos (não forma um polígono).
-    """
-    num_pontos = len(pontos)
-    if num_pontos < 3:
-        print("Para formar uma curva fechada (polígono), são necessários pelo menos 3 pontos.")
-        return 0.0
-
-    soma_primeiro_termo = 0
-    soma_segundo_termo = 0
-
-    for i in range(num_pontos):
-        x1, y1 = pontos[i]
-        x2, y2 = pontos[(i + 1) % num_pontos]  # O operador % garante que o último ponto se conecta ao primeiro
-
-        soma_primeiro_termo += x1 * y2
-        soma_segundo_termo += y1 * x2
-
-    area = 0.5 * abs(soma_primeiro_termo - soma_segundo_termo)
-    return area
 
 def smooth_closed_curve(pontos: list, fator_suavizacao: float = 1.0, num_pontos_resultado: int = 80) -> np.ndarray:
     """
@@ -140,6 +99,37 @@ def smooth_closed_curve(pontos: list, fator_suavizacao: float = 1.0, num_pontos_
     # 4. Empacotar os resultados em um único array NumPy de formato (N, 2) e retorná-lo
     pontos_suavizados = np.vstack((x_spline, y_spline)).T
     return pontos_suavizados
+
+def calculate_area_closed_curve(pontos):
+    """
+    Calcula a área de uma curva fechada (polígono) usando a Fórmula de Shoelace.
+
+    Args:
+        pontos: Uma lista de tuplas, onde cada tupla (x, y) representa um ponto
+                no plano cartesiano que compõe a curva fechada.
+                Os pontos devem estar em ordem sequencial (horário ou anti-horário).
+
+    Returns:
+        A área da curva fechada (polígono) como um float.
+        Retorna 0.0 se a lista de pontos tiver menos de 3 pontos (não forma um polígono).
+    """
+    num_pontos = len(pontos)
+    if num_pontos < 3:
+        print("Para formar uma curva fechada (polígono), são necessários pelo menos 3 pontos.")
+        return 0.0
+
+    soma_primeiro_termo = 0
+    soma_segundo_termo = 0
+
+    for i in range(num_pontos):
+        x1, y1 = pontos[i]
+        x2, y2 = pontos[(i + 1) % num_pontos]  # O operador % garante que o último ponto se conecta ao primeiro
+
+        soma_primeiro_termo += x1 * y2
+        soma_segundo_termo += y1 * x2
+
+    area = 0.5 * abs(soma_primeiro_termo - soma_segundo_termo)
+    return area
 
 def check_contained_curve(curva_interna_pontos, curva_externa_pontos):
     """
@@ -222,13 +212,11 @@ for data in data_list:
 
             """ Endo """
             mask = (slice_2d == 1)
-            mask = smooth_image(mask, 3)
             contours = find_contours(mask, level=0.5) # Retorno: um array numpy [N, (y, x)]
             generate_closed_curve(contours, endox, endoy, id, endo)
                 
             """ RVEndo """
             mask = (slice_2d == 3)
-            mask = smooth_image(mask, 3)
             contours = find_contours(mask, level=0.5)
             generate_closed_curve(contours, rvendox, rvendoy, id, rvendo)
 
@@ -241,8 +229,6 @@ for data in data_list:
             mask = mask & ~(slice_2d == 2)
             # Adicionando padding na imagem original
             slice_2d += mask
-            # Suavizando superfície
-            slice_2d = smooth_image(slice_2d, 3)
             # Salvando máscaras do RVEpi
             mask_rvepi[id] = slice_2d
             # Extraindo os contornos
@@ -276,6 +262,30 @@ for data in data_list:
             tolerancia = 400
             if len(rvepi[frame]) != 0:
                 if (calculate_area_closed_curve(rvepi[frame]) > calculate_area_closed_curve(rvepi[frame-1]) + tolerancia):
+                    frame -= 1
+                    while (frame >= 0):
+                        endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = epix[:,0,frame] = epiy[:,0,frame] = nan[:,0,0]
+                        frame -= 1
+            frame -= 1
+
+        """ Verificando o tamanho da área do rvendo nas fatias iniciais """
+        frame = int(Z / 2)
+        while frame >= 0:
+            tolerancia = 10
+            if len(rvendo[frame]) != 0:
+                if (calculate_area_closed_curve(rvendo[frame]) > calculate_area_closed_curve(rvendo[frame-1]) + tolerancia):
+                    frame -= 1
+                    while (frame >= 0):
+                        endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = epix[:,0,frame] = epiy[:,0,frame] = nan[:,0,0]
+                        frame -= 1
+            frame -= 1
+
+        """ Verificando o tamanho da área do endo nas fatias iniciais """
+        frame = int(Z / 2)
+        while frame >= 0:
+            tolerancia = 10
+            if len(endo[frame]) != 0:
+                if (calculate_area_closed_curve(endo[frame]) > calculate_area_closed_curve(endo[frame-1]) + tolerancia):
                     frame -= 1
                     while (frame >= 0):
                         endox[:,0,frame] = endoy[:,0,frame] = rvendox[:,0,frame] = rvendoy[:,0,frame] = rvepix[:,0,frame] = rvepiy[:,0,frame] = epix[:,0,frame] = epiy[:,0,frame] = nan[:,0,0]
