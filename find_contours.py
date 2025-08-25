@@ -271,7 +271,7 @@ for data in data_list:
         """ Verificando o tamanho da área do rvendo nas fatias iniciais """
         frame = int(Z / 2)
         while frame >= 0:
-            tolerancia = 10
+            tolerancia = 50
             if len(rvendo[frame]) != 0:
                 if (calculate_area_closed_curve(rvendo[frame]) > calculate_area_closed_curve(rvendo[frame-1]) + tolerancia):
                     frame -= 1
@@ -283,7 +283,7 @@ for data in data_list:
         """ Verificando o tamanho da área do endo nas fatias iniciais """
         frame = int(Z / 2)
         while frame >= 0:
-            tolerancia = 10
+            tolerancia = 200
             if len(endo[frame]) != 0:
                 if (calculate_area_closed_curve(endo[frame]) > calculate_area_closed_curve(endo[frame-1]) + tolerancia):
                     frame -= 1
